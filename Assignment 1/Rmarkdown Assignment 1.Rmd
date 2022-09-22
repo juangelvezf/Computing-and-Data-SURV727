@@ -185,33 +185,63 @@ function.square(6)
 The function should be called "my_CI" When called with "my_CI(2, 0.2)", the output of the function should read "The 95% CI upper bound of point estimate 2 with standard error 0.2 is 2.392. The lower bound is 1.608."
 Note: the function should take a point estimate and its standard error as arguments
 You may use the formula for 95% CI: point estimate +/- 1.96*standard error)
-Pasting text in R: paste() and paste0()
+
 ```{r 19, warning=FALSE}
 
-my_CI <- function(x, conf = 0.95) {
-  my_CI (x, se)
-  se <- sd(x) / sqrt(length(x))
-  alpha <- 1 - conf
-  mean(x) + se * qnorm(c(alpha / 2, 1 - alpha / 2))
-  }
+my_CI <- function(x, y) {
+  lower <- x - 1.96 * y
+  upper <- x + 1.96 * y
+  paste("The 95% CI upper bound of point estimate", x, "with standard error", y,
+        "is", upper,".", "The lower bound is", lower,".")
+}
 
+my_CI (2, 0.2)
 
 ```
 
 
 *20.* Write a function that converts all negative numbers in the following dataset into NA
-# Use as little code as possible and try to avoid code repetition
+Use as little code as possible and try to avoid code repetition
+
+```{r 20, warning=FALSE}
 set.seed(1002)
 df <- data.frame(replicate(10, sample(c(1:10, c(-99,-98,-5)), 6, rep = TRUE)))
 names(df) <- letters[1:6]
 df
+class(df)
+#function
+df= ifelse(df < 0, NA_real_, df)
+df
+class(df)
 
-
+```
 
 *21.* Use your function to convert all negative numbers in the dataset into NA without changing the class of the object
 
 
+```{r 21, warning=FALSE}
+set.seed(1002)
+df <- data.frame(replicate(10, sample(c(1:10, c(-99,-98,-5)), 6, rep = TRUE)))
+names(df) <- letters[1:6]
+df
+class(df)
+#function
+is.na(df) <- df < 0
+df
+class(df)
+```
+
 
 *22.* Change the function you wrote above such that it turns any negative number into NA!
-
+```{r 22, warning=FALSE}
+set.seed(1002)
+df <- data.frame(replicate(10, sample(c(1:10, c(-99,-98,-5)), 6, rep = TRUE)))
+names(df) <- letters[1:6]
+df
+class(df)
+#function
+is.na(df) <- df < 0
+df
+class(df)
+```
 
