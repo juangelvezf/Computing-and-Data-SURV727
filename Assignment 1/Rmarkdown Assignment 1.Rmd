@@ -1,6 +1,6 @@
 ---
-title: 'Assignment # 1'
-author: "Juan Gelvez-Ferreira"
+title: 'SURV727 Assignment # 1'
+author: "Juan Gelvez-Ferreira. PhD Student"
 date: "`r Sys.Date()`"
 output: pdf_document
 ---
@@ -9,7 +9,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r start, echo=FALSE}
+```{r start, include=FALSE}
 rm(list=ls()) 
 
 packages = c("tidyverse","readxl","ggplot2","haven")
@@ -26,10 +26,9 @@ library(x, character.only = TRUE)
 
 *1.* Which command do you use to determine the type of an object?
 
-Two alternatives. "type()" and/or typeof() to determines the type or storage mode of any object. 
+Typeof() to determines the type or storage mode of any object. 
 
 ```{r 1, echo=TRUE}
-?type
 ?typeof
 ```
 
@@ -49,6 +48,7 @@ A1 <- as.integer(A)
 A1
 typeof(A1)
 ```
+
 *4*Create an integer vector B containing the numbers one through ten
 ```{r 4, echo=TRUE}
 B <- (1:10)
@@ -62,14 +62,14 @@ C
 typeof(C)
 
 ```
-*6*Change the third value of B to "3.5"
+*6* Change the third value of B to "3.5"
 ```{r 6, echo=TRUE}
 B
 B1<-replace(B,B==3,3.5)
 B1
 ```
 
-*7*Did this affect the type of B? How?
+*7* Did this affect the type of B? How?
 Yes, it moved from integer to double. Since "B" was containing the numbers one through ten, and the new B "B1" has a decimal, the type changed from a integer to a double. 
 ```{r 7, echo=TRUE}
 typeof(B1)
@@ -103,12 +103,10 @@ angell_small<- angell_stata %>%
 head(angell_small)
 ```
 
-
-
 *12.* Install the "MASS" package, load the package. Then, load the Boston dataset
 
 ```{r 12, warning=FALSE}
-install.packages("MASS")
+#install.packages("MASS")
 library(MASS)
 head(Boston)
 ```
@@ -178,7 +176,7 @@ function.square <- function(a) {
    }
 }
 
-function.square(6)
+function.square(6) #for example number 6
 ```
 
 *19.*. Write a function that calculates 95% confidence intervals for a point estimate.
@@ -210,24 +208,19 @@ names(df) <- letters[1:6]
 df
 class(df)
 #function
-df= ifelse(df < 0, NA_real_, df)
-df
-class(df)
+into_NA <- function (x) {
+  x <- replace(x, x < 0, NA)
+  print(x)
+}
+into_NA(df)
 
 ```
 
-*21.* Use your function to convert all negative numbers in the dataset into NA without changing the class of the object
+*21.* Use your function to convert all negative numbers in the dataset into NA without changing the class of the object.
 
 
 ```{r 21, warning=FALSE}
-set.seed(1002)
-df <- data.frame(replicate(10, sample(c(1:10, c(-99,-98,-5)), 6, rep = TRUE)))
-names(df) <- letters[1:6]
-df
-class(df)
-#function
-is.na(df) <- df < 0
-df
+#With the function above, the class of the object did not change
 class(df)
 ```
 
@@ -240,8 +233,12 @@ names(df) <- letters[1:6]
 df
 class(df)
 #function
-is.na(df) <- df < 0
-df
-class(df)
+into_NA_ <- function (x) {
+  x <- replace(x, x < 0, "NA!")
+  print(x)
+}
+into_NA_(df)
+
+
 ```
 
