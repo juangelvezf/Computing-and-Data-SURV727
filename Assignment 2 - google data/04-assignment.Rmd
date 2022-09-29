@@ -1,0 +1,134 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Assignment 2"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(gtrendsR)
+library(censusapi)
+```
+
+## Google Trends
+
+In this notebook, your task is to combine and explore web data using APIs and `dplyr`. Try to utilize piping in this notebook when writing your code.
+
+Our first data source is the Google Trends API. This time we are interested in the search trends for `crime` and `loans` in Illinois in the year 2016.
+
+```{r}
+res <- gtrends(c("crime", "loans"), geo = "US-IL", time = "2016-01-01 2016-12-31", low_search_volume = TRUE)
+plot(res)
+```
+
+The resulting list includes a `data.frame` with the search interest by city. Extract this data set as a `tibble` and print the first few observations.
+
+```{r}
+
+```
+
+Find the mean, median and variance of the search hits for the keywords `crime` and `loans`. This can be done via piping with `dplyr`.
+
+```{r}
+
+```
+
+Note that there might be multiple rows for each city if there were hits for both "crime" and "loans" in that city. It might be easier if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city. Transform the `tibble` accordingly and save the result as a new object.
+
+```{r}
+
+```
+
+Which cities (locations) have the highest search frequency for `loans`? Print the first rows of the new `tibble` from the previous chunk, ordered by `loans`.
+
+```{r}
+
+```
+
+Is there a relationship between the search intensities between the two keywords we used? Create a scatterplot of `crime` and `loans` with `qplot()`.
+
+```{r}
+
+```
+
+## Google Trends + ACS
+
+Now lets add another data set. The censusapi package provides a nice R interface for communicating with this API. However, before running queries we need an access key. This (easy) process can be completed here:
+
+https://api.census.gov/data/key_signup.html
+
+Once you have an access key, store this key in the cs_key object. We will use this object in all following API queries.
+
+```{r}
+cs_key <- "your key"
+```
+
+In the following, we request basic socio-demographic information (population, median age, median household income, income per capita) for cities and villages in the state of Illinois.
+
+```{r}
+acs_il <- getCensus(name = "acs/acs5",
+                    vintage = 2016, 
+                    vars = c("NAME", "B01001_001E", "B06002_001E", "B19013_001E", "B19301_001E"), 
+                    region = "place:*", 
+                    regionin = "state:17",
+                    key = cs_key)
+head(acs_il)
+```
+
+Convert values that represent missings to NAs.
+
+```{r}
+acs_il[acs_il == -666666666] <- NA
+```
+
+Now, it might be useful to rename the socio-demographic variables (`B01001_001E` etc.) in our data set and assign more meaningful names. 
+
+```{r}
+acs_il <-
+  acs_il %>%
+  rename(pop = B01001_001E, age = B06002_001E, hh_income = B19013_001E, income = B19301_001E)
+```
+
+Print the first rows of the variable `NAME`.
+
+```{r}
+
+```
+
+It seems like we could try to use this location information listed above to merge this data set with the Google Trends data. However, we first have to clean `NAME` so that it has the same structure as `location` in the search interest by city data. Add a new variable `location` to the ACS data that only includes city names. 
+
+```{r}
+
+```
+
+First, check how many cities don't appear in both data sets, i.e. cannot be matched.
+
+```{r}
+
+```
+
+That's a lot, unfortunately. However, we can still try using the data. Create a new data set by joining the Google Trends and the ACS data. Keep only cities that appear in both data sets. 
+
+```{r}
+
+```
+
+Now we can utilize information from both data sources. As an example, print the `crime` and `loans` search popularity for the first ten cities in Illinois with the highest population (in 2016).
+
+```{r}
+
+```
+
+Next, compute the mean of the search popularity for both keywords for cities that have an above average median household income and for those that have an below average median household income. When building your pipe, start with creating the grouping variable and then proceed with the remaining tasks.
+
+```{r}
+
+```
+
+Is there a relationship between the median household income and the search popularity of `loans`? Plot a scatterplot with `qplot()`.
+
+```{r}
+
+```
