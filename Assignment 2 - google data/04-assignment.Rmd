@@ -1,6 +1,7 @@
 ---
 title: "Fundamentals of Computing and Data Display"
 subtitle: "Assignment 2"
+author: "Juan Gelvez-Ferreira"
 output: html_notebook
 ---
 
@@ -26,18 +27,30 @@ plot(res)
 The resulting list includes a `data.frame` with the search interest by city. Extract this data set as a `tibble` and print the first few observations.
 
 ```{r}
+names(res)
+is_tibble(res)
+is_tibble(as_tibble(res$interest_by_city))
+
+res1 <- as_tibble(res$interest_by_city)
+head(res1)
 
 ```
 
 Find the mean, median and variance of the search hits for the keywords `crime` and `loans`. This can be done via piping with `dplyr`.
 
 ```{r}
-
+library(dplyr)
+res1 %>% 
+  group_by(keyword) %>% 
+  summarise(hits_mean = mean(hits, na.rm = TRUE),
+            hits_median = median(hits, na.rm = TRUE),
+            hits_sd = sd(hits, na.rm = TRUE))
 ```
 
 Note that there might be multiple rows for each city if there were hits for both "crime" and "loans" in that city. It might be easier if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city. Transform the `tibble` accordingly and save the result as a new object.
 
 ```{r}
+
 
 ```
 
