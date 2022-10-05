@@ -11,6 +11,8 @@ output: html_notebook
 library(tidyverse)
 library(gtrendsR)
 library(censusapi)
+library(dplyr)
+library(tidyr)
 ```
 
 ## Google Trends
@@ -39,7 +41,7 @@ head(res1)
 Find the mean, median and variance of the search hits for the keywords `crime` and `loans`. This can be done via piping with `dplyr`.
 
 ```{r}
-library(dplyr)
+
 res1 %>% 
   group_by(keyword) %>% 
   summarise(hits_mean = mean(hits, na.rm = TRUE),
@@ -51,18 +53,30 @@ Note that there might be multiple rows for each city if there were hits for both
 
 ```{r}
 
-
+res2 <- pivot_wider(res1, 
+                    names_from = keyword, 
+                    values_from = hits)
+head(res2)
 ```
 
 Which cities (locations) have the highest search frequency for `loans`? Print the first rows of the new `tibble` from the previous chunk, ordered by `loans`.
 
+
+
 ```{r}
 
+#Atlanta, Willowbrook and Williamsfield are the locations that have the highest search frequency for `loans`
+
+res2 %>% 
+  slice_max(loans, n = 6)
 ```
 
 Is there a relationship between the search intensities between the two keywords we used? Create a scatterplot of `crime` and `loans` with `qplot()`.
 
 ```{r}
+#There isn´t a clear a relationship between the search intensities between the crime and loans. 
+
+qplot(loans, crime, data=res2)
 
 ```
 
@@ -75,7 +89,7 @@ https://api.census.gov/data/key_signup.html
 Once you have an access key, store this key in the cs_key object. We will use this object in all following API queries.
 
 ```{r}
-cs_key <- "your key"
+cs_key <- "412c45f7f8f25f31dfa9121b48f369df61b2711c"
 ```
 
 In the following, we request basic socio-demographic information (population, median age, median household income, income per capita) for cities and villages in the state of Illinois.
@@ -86,7 +100,7 @@ acs_il <- getCensus(name = "acs/acs5",
                     vars = c("NAME", "B01001_001E", "B06002_001E", "B19013_001E", "B19301_001E"), 
                     region = "place:*", 
                     regionin = "state:17",
-                    key = cs_key)
+                    key = "412c45f7f8f25f31dfa9121b48f369df61b2711c")
 head(acs_il)
 ```
 
@@ -107,12 +121,17 @@ acs_il <-
 Print the first rows of the variable `NAME`.
 
 ```{r}
-
+acs_il %>% 
+  slice_max(NAME, n = 6)
 ```
 
 It seems like we could try to use this location information listed above to merge this data set with the Google Trends data. However, we first have to clean `NAME` so that it has the same structure as `location` in the search interest by city data. Add a new variable `location` to the ACS data that only includes city names. 
 
 ```{r}
+acs_il2 <- acs_il %>% separate(NAME, c('location', 'NAME'))
+print(" Data frame after splitting: ")
+acs_il2 %>% 
+  slice_max(location, n = 6)
 
 ```
 
