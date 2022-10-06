@@ -61,8 +61,6 @@ head(res2)
 
 Which cities (locations) have the highest search frequency for `loans`? Print the first rows of the new `tibble` from the previous chunk, ordered by `loans`.
 
-
-
 ```{r}
 
 #Atlanta, Willowbrook and Williamsfield are the locations that have the highest search frequency for `loans`
@@ -144,23 +142,41 @@ First, check how many cities don't appear in both data sets, i.e. cannot be matc
 That's a lot, unfortunately. However, we can still try using the data. Create a new data set by joining the Google Trends and the ACS data. Keep only cities that appear in both data sets. 
 
 ```{r}
-
+new_data<- inner_join(res2, acs_il2, by ='location')
+head(new_data)
 ```
 
 Now we can utilize information from both data sources. As an example, print the `crime` and `loans` search popularity for the first ten cities in Illinois with the highest population (in 2016).
 
 ```{r}
-
+new_data %>% 
+  slice_max(pop, n = 10)
 ```
 
 Next, compute the mean of the search popularity for both keywords for cities that have an above average median household income and for those that have an below average median household income. When building your pipe, start with creating the grouping variable and then proceed with the remaining tasks.
 
 ```{r}
 
+new_data$hh_income_level <- "Below average median household income"
+
+new_data$hh_income_level[which(new_data$hh_income > 54379.19)] <-"Above average median household income"
+
+mean_crime_hhincome <- new_data %>% 
+    group_by(hh_income_level) %>% 
+    summarise(mean_crime = mean(crime, na.rm = TRUE)) 
+
+mean_loans_hhincome <- new_data %>% 
+    group_by(hh_income_level) %>% 
+    summarise(mean_loans = mean(loans, na.rm = TRUE))
+
+mean_crime_hhincome
+mean_loans_hhincome
 ```
 
 Is there a relationship between the median household income and the search popularity of `loans`? Plot a scatterplot with `qplot()`.
 
 ```{r}
+# There is a positive but aparently non-significant correlation between loans and household income. 
 
+qplot(loans, hh_income, data=new_data, , geom = c("point", "smooth"))
 ```
