@@ -1,0 +1,249 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Data Wrangling"
+author: "Christoph Kern and Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+```{r echo=T, results='hide', message=FALSE}
+# install package only if it isn't installed
+if (!require(gtrendsR)) install.packages("gtrendsR", repos = "http://cran.us.r-project.org")
+```
+
+```{r echo=T, results='hide', message=FALSE}
+library(gtrendsR)
+```
+
+## APIs I: Google Trends
+
+Google Trends allows to explore the popularity of topics for different regions over time based on Google search queries. 
+
+https://trends.google.com/
+
+The `gtrendsR` package provides a convenient interface to communicate with the Google Trends API from within R. Its main function is `gtrends()`.
+
+```{r}
+?gtrends
+```
+
+In this notebook, we want to explore the search interest in crime related topics in Chicago, IL. In order to narrow our API query to a specific region, DMA codes can be used. If interested in countries, ISO 3166-1 alpha-2 codes can be used.
+
+Use `data(countries)` to search for the right geo code.
+
+https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
+
+The resulting object is of class `gtrends`, for which the `gtrends` package provides a tailored plotting function.
+
+```{r}
+res <- gtrends(c("crime", "shooting"), 
+               geo = "US-IL", onlyInterest = TRUE)
+
+plot(res)
+```
+
+The default time horizon is today minus five years. This can be adjusted by using the `time` argument.
+
+```{r}
+res <- gtrends(c("crime", "shooting"), geo = "US-IL", 
+               time = "2021-01-01 2021-06-30", low_search_volume = T)
+
+plot(res)
+```
+
+Information on what is plotted on the y-axis can be found in the following articles:
+
+https://support.google.com/trends/answer/4365533?hl=en
+
+https://medium.com/google-news-lab/what-is-google-trends-data-and-what-does-it-mean-b48f07342ee8 
+
+A quick look at the structure of the `res` object.
+
+```{r}
+str(res)
+```
+
+Seems like the first element of this list is a `data.frame` which holds the main results of the API query.
+
+```{r}
+head(res$interest_over_time)
+```
+
+## tidyr
+
+We will use the `tidyr` package to tidy up this data set. In addition, we will need different piping operators from `magrittr`.
+
+```{r echo=T, results='hide', message=FALSE}
+if (!require(tidyverse)) install.packages("tidyverse")
+library(tidyverse)
+library(magrittr)
+```
+
+First, we transform the `data.frame` into a `tibble`.
+
+```{r}
+res_time <- as_tibble(res$interest_over_time)
+glimpse(res_time)
+```
+
+As with a normal `data.frame`, there are different ways to access specific pieces of the data set. Using `[` vs. `[[` returns the same information, but in different data structures.
+
+```{r}
+str(res_time[, 1])
+str(res_time[[1]])
+```
+
+The popularity measure `hits` in the original data.frame is a single vector, with another vector `keyword` representing the corresponding search term. We can `pivot_wider()` the `hits` information into two columns, based on `keyword`.
+
+```{r}
+res_time_w <- pivot_wider(res_time, 
+                          names_from = keyword, 
+                          values_from = hits)
+head(res_time_w)
+```
+
+To reverse this transformation, `pivot_longer()` can be used. 
+
+```{r}
+res_time_w %>%
+  pivot_longer(6:7, names_to = "keyword", values_to = "hits")
+```
+
+The last code chunk did not change the tibble, since we used the normal (forward) pipe. To overwrite the original tibble, `%<>%` can be used (or "<-"). Here we split the `geo` column into three vectors, save the result, and call `str()` on the updated tibble. 
+
+```{r}
+res_time_w2 <- res_time_w
+res_time_w2 %<>%
+  separate(date, c("year", "month", "day"), sep = "-") %T>%
+  str(.)
+```
+
+Piping can also be useful for data exploration. Here we filter rows based on `date` and then call `mean()` for the selected rows. Note that we use `%$%` in the second line, since `mean()` expects a vector as input.
+
+```{r}
+res_time_w %>%
+  subset(date >= "2018-01-15") %$%
+  mean(crime)
+```
+
+Piping can also be useful to check some properties of a data set. Here we exclude rows with missings (NAs) in any column and then check the dimension of the resulting tibble. Its the same as the original data frame, i.e. there are no NAs.
+
+```{r}
+res_time_w %>%
+  drop_na(.) %>%
+  dim(.)
+```
+
+## Joins
+
+By default, the trend query looks at Google web searches. We can also run the query for other Google products, such as Google news (or images, shopping, youtube). 
+
+```{r}
+res_new <- gtrends(c("crime", "shooting"), 
+                   geo = "US-IL", time = "2021-01-01 2021-06-30", 
+                   low_search_volume = T, gprop = "news")
+
+plot(res_new)
+```
+
+Again, transform results into a tibble.
+
+```{r}
+res_time_new <- as_tibble(res_new$interest_over_time)
+```
+
+A slightly longer pipe. It (1) uses the `res_time_new` tibble, (2) renames `hits` to `hits_news`, (3) selects the renamed variable, `date` and `keyword`, (4) joins the current tibble and `res_time`, (5) renames `hits` of the joined data set to `hits_web` and (6) saves the result as `res_join`.
+
+```{r}
+res_join <- # (6)
+  res_time_new %>% # (1)
+  rename(hits_news = hits) %>% # (2)
+  subset(select = c(date, keyword, hits_news)) %>% # (3)
+  left_join(res_time, by = c("date", "keyword")) %>% # (4)
+  rename(hits_web = hits) # (5)
+```
+
+Inspect the result.
+
+```{r}
+res_join
+```
+
+Note that the original results object `res_new` contains some additional information, such as the search interest by city/ region.
+
+```{r}
+res_new$interest_by_dma
+```
+
+## (More) dplyr
+
+Now some data exploration. Let's find the dates with the highest numbers of hits for our keywords using `dplyr`s `arrange()` function.
+
+```{r}
+res_join %>%
+  select(date, keyword, hits_web, hits_news) %>%
+  arrange(desc(hits_web))
+```
+
+We can do the same thing focusing only on hits for "crime". Note that `filter()` can be used with combinations of variables by using logical operators, e.g. we could filter by keyword and date.
+
+```{r}
+res_join %>%
+  filter(keyword == "crime") %>%
+  select(date, keyword, hits_web, hits_news) %>%
+  arrange(desc(hits_news))
+```
+
+Another very handy function is `group_by()`, that allows us to collapse rows and pass the grouped data to the next set of functions. Here we generate summary statistics for the hits variables by keyword.
+
+```{r}
+res_join %>%
+  group_by(keyword) %>%
+  summarise(m_hitsw = mean(hits_web, na.rm = T),
+            m_hitsn = mean(hits_news, na.rm = T))
+```
+
+Finally, `mutate()` can also be used to create new variables while piping. In this code chunk, we first generate `total_hits` and then summarize grouped by `keyword`.
+
+```{r}
+res_join %>%
+  mutate(total_hits = hits_news + hits_web) %>%
+  group_by(keyword) %>%
+  summarise(m_hits = mean(total_hits, na.rm = T), 
+            v_hits = var(total_hits, na.rm = T))
+```
+
+The power of `dplyr` comes from the possibility to combine these basic functions using pipes. We can easily create aggregated variables on the group level by combining `group_by()` and `mutate()`. `ungroup()` returns the data again in the original form.
+
+```{r}
+res_join %>%
+  group_by(keyword) %>%
+  mutate(m_hitsw = mean(hits_web, na.rm = T), 
+         m_hitsn = mean(hits_news, na.rm = T)) %>%
+  ungroup() %>%
+  select(date, hits_news, hits_web, m_hitsw, m_hitsn)
+```
+
+Finally, we briefly introduce `qplot()`. This function is essentially a wrapper for `ggplot()` and can be used to create basic plots quickly. Here we draw a `qplot()` version of the line plots from the previous code chunks, faceted by `keyword`.
+
+```{r}
+res_join %>%
+  qplot(x = date, y = hits_web, data = ., 
+        geom = "line", facets = . ~ keyword)
+```
+
+What if we wanted to create the same type of plot, but this time focusing only on the first three months? Note that there are different ways to solve this task.
+
+```{r}
+res_join %>%
+  separate(date, c("year", "month", "day"), 
+           sep = "-", remove = FALSE) %>%
+  filter(month %in% c("01","02","03")) %>%
+  qplot(x = date, y = hits_web, data = .,
+        geom = "line", facets = . ~ keyword)
+```
+
+## References
+
+* https://github.com/PMassicotte/gtrendsR

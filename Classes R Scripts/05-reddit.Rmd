@@ -1,0 +1,44 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "reddit"
+author: "Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+# install.packages("RedditExtractoR")
+# install.packages("tidytext")
+```
+
+```{r}
+library(tidytext)
+library(RedditExtractoR)
+```
+
+## Collecting reddit data
+
+We will use the package `RedditExtractoR` to obtain submission and comment data from reddit. Unfortunately, this package is not ideal for some of the tasks we may be interested in. Since I am not aware of fully functional R packages for obtaining reddit data from R, I have relied mostly on python.
+
+```{r}
+# We search for submissions which contain the word 'kavanaugh' to subreddit 'liberal'. From the resulting df, we get the URLs pointing to each submission. We use it to obtain comments to the submission.
+# Submissions are sorted by number of comments and we check a maximum of 10 pages.
+links.liberal.kavanaugh <- reddit_urls(search_terms = "kavanaugh",
+                                       subreddit = "liberal",
+                                       page_threshold = 10,
+                                       sort_by = "comments")
+head(links.liberal.kavanaugh$title)
+```
+
+We next get the comments to the submissions that we pulled above using the URLs of the submissions as reference.
+```{r}
+head(links.liberal.kavanaugh$URL)
+comments.liberal.kavanaugh <- reddit_content(URL = links.liberal.kavanaugh$URL[1:5])
+```
+Using `post_date` (submission) and `comm_date` (comment), we can select submissions and comments based on the time they were posted. Using `link`, we could try to obtain additional information about submission content (e.g., link may post to a news article). `Structure` allows us to obtain an overview of the comment structure. Most interestingly, `comment` gives us the content of the comment.
+
+```{r}
+head(comments.liberal.kavanaugh$comment)
+# Seems like there is some cleaning we will have to do!
+```

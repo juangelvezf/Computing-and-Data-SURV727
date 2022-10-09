@@ -1,0 +1,200 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Web Scraping"
+author: "Christoph Kern and Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+We start by first installing some packages that we will need throughout this notebook.
+
+```{r}
+# install.packages("xml2")
+# install.packages("rvest")
+# install.packages("jsonlite")
+# install.packages("robotstxt")
+# install.packages("RSocrata")
+```
+
+Besides installing the packages, they also have to be loaded.
+
+```{r}
+library(xml2)
+library(rvest)
+library(jsonlite)
+library(robotstxt)
+library(RSocrata)
+```
+
+## Web Scraping Example
+
+### Single website
+
+In this example, we scrape some information from niche.com on colleges in the US. This website reports college ratings and presents the results in a relatively structured list, which eases our scraping task. We first check whether robots are allowed on their webpage.
+
+```{r}
+paths_allowed("https://www.niche.com/colleges/search/best-colleges/")
+```
+
+We then start by reading in the information from the first results page (search without filters).
+
+```{r}
+url <- read_html("https://www.niche.com/colleges/search/best-colleges/")
+```
+
+Next, lets try to extract the college names from this page. To create the corresponding xpath, https://selectorgadget.com/ can be used by clicking on the desired element of the webpage. We then copy the resulting xpath into the call to `html_nodes()`.
+
+```{r}
+nds <- html_nodes(url, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "search-result__title", " " ))]')
+```
+
+This object is still a list, so we have to extract further to convert it to the desired format.
+
+```{r}
+names <- html_text(nds)
+head(names)
+```
+
+Done (already)! However, obviously there is more on this website that we want to extract. In the next chunk, we look at the acceptance rate, net price and SAT range for the colleges. We proceed as earlier by using https://selectorgadget.com/ to get the corresponding xpath. 
+
+```{r}
+nds2 <- html_nodes(url, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "search-result-fact-list__item", " " ))]')
+```
+
+Again, we extract the text from the results object.
+
+```{r}
+stats <- html_text(nds2)
+head(stats)
+```
+
+Seems like we are moving in the right direction, but we might want to re-structure this character vector and built a (cleaner) `data.frame`. For this, we first convert to a 4-column `matrix`.  
+
+```{r}
+stats_dat <- matrix(stats, ncol = 4, byrow = T)
+head(stats_dat)
+```
+
+Now we create a `data.frame` and assign variable names.
+
+```{r}
+stats_dat <- as.data.frame(stats_dat)
+names(stats_dat) <- c("niche_grade", "acceptance_rate", "net_price", "SAT_range")
+```
+
+We probably want to clean-up the variables and e.g. get rid of non-numeric content. This can be done by using regular expressions via `gsub()`.
+
+```{r}
+stats_dat$niche_grade <- gsub("Overall Niche Grade", "", stats_dat$niche_grade)
+stats_dat$acceptance_rate <- as.numeric(gsub("[^0123456789,]", "", stats_dat$acceptance_rate))
+stats_dat$net_price <- as.numeric(gsub("[^0123456789]", "", stats_dat$net_price))
+stats_dat$SAT_range <- gsub("SAT Range", "", stats_dat$SAT_range)
+head(stats_dat)
+```
+
+Although we could do more tidying here, lets just merge this data with the college names we scraped earlier and create a (somewhat) final data set.
+
+```{r}
+top_colleges <- data.frame(names, stats_dat)
+str(top_colleges)
+```
+
+### Looping over multiple pages
+
+When searching for colleges, the full list of results is spread over multiple pages. To scrape the same type of information from multiple pages we can embed the previous steps in a loop. We first specify the number of pages to loop over (e.g., 10) and define an empty `data.frame` to store the results.
+
+```{r}
+npages <- 10
+colleges <- data.frame()
+```
+
+Now we run all previous steps within a for-loop. The key component here is that since we need a different url for each page, we use a counter and modify the url by pasting in a new page number (from one to ten) in every iteration of the loop. The other components of the loop are essentially the same as before, minus most of the data cleaning to keep things readable.
+
+```{r}
+for(i in 1:npages) {
+  url <- paste0("https://www.niche.com/colleges/search/best-colleges/?page=",i, sep = "")
+  src <- read_html(url)
+  print(url)
+  
+  nds <- html_nodes(src, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "search-result__title", " " ))]')
+  names <- html_text(nds)
+  
+  nds2 <- html_nodes(src, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "search-result-fact-list__item", " " ))]')
+  stats <- html_text(nds2)
+  stats_dat <- as.data.frame(matrix(stats, ncol = 4, byrow = T))
+
+  part <- data.frame(names, stats_dat)
+  colleges <- rbind(colleges, part)
+}
+```
+
+Note that the resulting `data.frame` now has 270 rows, since we scraped over 10 pages (each with 27 results) instead of using just one.
+
+```{r}
+str(colleges)
+```
+
+## APIs
+
+A more convenient way to gather information from the web is using APIs. In this example, we focus on reported crime incidents that are recorded by the City of Chicago and published via an API. Documentation on the dataset and on how to communicate with the API can be found here:
+
+https://dev.socrata.com/foundry/data.cityofchicago.org/6zsd-86xi
+
+A query consists of an unique URL that requests a certain data piece. You can try out the following query with your web browser:
+
+https://data.cityofchicago.org/resource/6zsd-86xi.json?case_number=01G050460
+
+You might notice that the response provides data in the JSON file format. We can also run the query from within R and store the result as an object.
+
+```{r}
+cc_exmpl1 <- fromJSON('https://data.cityofchicago.org/resource/6zsd-86xi.json?case_number=01G050460')
+```
+
+The function `fromJSON` converts the JSON file into a `data.frame`, which is easier to work with in R. 
+
+```{r}
+cc_exmpl1
+str(cc_exmpl1)
+```
+
+Whereas the previous approach should work with any API, the `RSocrata` package provides functions that were particularly built to communicate with the Socrata Open Data API from within R. 
+
+```{r}
+cc_exmpl2 <- read.socrata('https://data.cityofchicago.org/resource/6zsd-86xi.json?case_number=01G050460')
+```
+
+This approach retrieves the same information, with only some minor differences in terms of how the resulting `data.frame` is organized.
+
+```{r}
+str(cc_exmpl2)
+```
+
+Now lets modify the query and collect information about reported crimes for a specific date.
+
+```{r}
+cc_exmpl3 <- read.socrata('https://data.cityofchicago.org/resource/6zsd-86xi.json?date=2018-05-01')
+```
+
+The resulting object should now have more than one observation.
+
+```{r}
+head(cc_exmpl3)
+```
+
+We can also collect data for a specific time span, e.g. one year. (This may take some time to complete.)
+
+```{r}
+cc_2020 <- read.socrata("https://data.cityofchicago.org/resource/6zsd-86xi.json?$where=date between '2020-01-01' and '2020-12-31'")
+```
+
+How many observations do we have?
+
+```{r}
+nrow(cc_2020)
+```
+
+## References
+
+* https://www.opendatanetwork.com/
+* https://dev.socrata.com/

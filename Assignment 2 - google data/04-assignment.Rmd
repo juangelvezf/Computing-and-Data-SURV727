@@ -1,18 +1,28 @@
 ---
 title: "Fundamentals of Computing and Data Display"
-subtitle: "Assignment 2"
 author: "Juan Gelvez-Ferreira"
-output: html_notebook
+subtitle: Assignment 2
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
 ---
 
 ## Setup
 
-```{r}
-library(tidyverse)
-library(gtrendsR)
-library(censusapi)
-library(dplyr)
-library(tidyr)
+```{r, echo=FALSE}
+rm(list=ls()) 
+
+packages = c("tidyverse", "gtrendsR","censusapi","dplyr","tidyr")
+
+package.check <- lapply(packages, FUN = function(x) {
+if (!require(x, character.only = TRUE)) {
+install.packages(x, dependencies = TRUE)
+library(x, character.only = TRUE)
+  
+}})
+
 ```
 
 ## Google Trends
@@ -36,6 +46,7 @@ is_tibble(as_tibble(res$interest_by_city))
 res1 <- as_tibble(res$interest_by_city)
 head(res1)
 
+
 ```
 
 Find the mean, median and variance of the search hits for the keywords `crime` and `loans`. This can be done via piping with `dplyr`.
@@ -47,34 +58,56 @@ res1 %>%
   summarise(hits_mean = mean(hits, na.rm = TRUE),
             hits_median = median(hits, na.rm = TRUE),
             hits_sd = sd(hits, na.rm = TRUE))
+
+
 ```
 
 Note that there might be multiple rows for each city if there were hits for both "crime" and "loans" in that city. It might be easier if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city. Transform the `tibble` accordingly and save the result as a new object.
 
 ```{r}
 
-res2 <- pivot_wider(res1, 
-                    names_from = keyword, 
-                    values_from = hits)
+res3<- res1 %>%
+  pivot_wider(names_from = keyword, values_from = hits, values_fill = 0)
+
+
+res2 <-   res1 %>% 
+   pivot_wider(names_from = keyword, 
+               values_from = hits)
+
 head(res2)
+
+res2 <-  res1 %>%
+  pivot_wider(names_from = keyword, values_from = hits, values_fn = list)
+
+iris_re %>%
+  pivot_longer(cols = -Species, names_to = c("Part", ".value"), names_sep= "[.]") %>%
+  head
+
+
+?pivot_wider
+
+res2 <-  res1 %>%  
+  spread(keyword, hits)
+
+
 ```
 
 Which cities (locations) have the highest search frequency for `loans`? Print the first rows of the new `tibble` from the previous chunk, ordered by `loans`.
 
 ```{r}
-
 #Atlanta, Willowbrook and Williamsfield are the locations that have the highest search frequency for `loans`
 
-res2 %>% 
-  slice_max(loans, n = 6)
+res2 %>%
+  arrange(desc(loans))
+
 ```
 
 Is there a relationship between the search intensities between the two keywords we used? Create a scatterplot of `crime` and `loans` with `qplot()`.
 
 ```{r}
 #There isn´t a clear a relationship between the search intensities between the crime and loans. 
-
-qplot(loans, crime, data=res2)
+names(res2)
+plot(crime, loans, data=res2)
 
 ```
 
@@ -136,6 +169,14 @@ acs_il2 %>%
 First, check how many cities don't appear in both data sets, i.e. cannot be matched.
 
 ```{r}
+#The socio-demographic information(acs_il2) has 1368 locations, whereas google trends dataset has 356. That means that many locations won´t be merge. 
+
+summary(res2$location)
+summary(acs_il2$location)
+
+#In total, just 250 locations can be merge.  
+intersect(res2$location, acs_il2$location)
+
 
 ```
 
@@ -156,6 +197,8 @@ new_data %>%
 Next, compute the mean of the search popularity for both keywords for cities that have an above average median household income and for those that have an below average median household income. When building your pipe, start with creating the grouping variable and then proceed with the remaining tasks.
 
 ```{r}
+
+mean(new_data$hh_income)
 
 new_data$hh_income_level <- "Below average median household income"
 
