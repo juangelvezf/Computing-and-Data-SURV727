@@ -66,29 +66,10 @@ Note that there might be multiple rows for each city if there were hits for both
 
 ```{r}
 
-res3<- res1 %>%
-  pivot_wider(names_from = keyword, values_from = hits, values_fill = 0)
-
-
-res2 <-   res1 %>% 
-   pivot_wider(names_from = keyword, 
-               values_from = hits)
+res2 <-  res1 %>%
+  pivot_wider(names_from = keyword, values_from = hits)
 
 head(res2)
-
-res2 <-  res1 %>%
-  pivot_wider(names_from = keyword, values_from = hits, values_fn = list)
-
-iris_re %>%
-  pivot_longer(cols = -Species, names_to = c("Part", ".value"), names_sep= "[.]") %>%
-  head
-
-
-?pivot_wider
-
-res2 <-  res1 %>%  
-  spread(keyword, hits)
-
 
 ```
 
