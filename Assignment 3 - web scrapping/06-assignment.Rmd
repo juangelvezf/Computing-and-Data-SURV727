@@ -12,7 +12,7 @@ output:
 ```{r, echo=FALSE}
 rm(list=ls()) 
 
-packages = c("tidyverse", "xml2","rvest","jsonlite","robotstxt","RSocrata")
+packages = c("tidyverse", "xml2","rvest","jsonlite","robotstxt","RSocrata","splitstackshape","tibble","writexl")
 
 package.check <- lapply(packages, FUN = function(x) {
 if (!require(x, character.only = TRUE)) {
@@ -42,14 +42,13 @@ Now extract the tables from this object (using the `rvest` package) and save the
 
 ```{r}
 nds <- html_table(wiki)
-
 ```
 
 Use `str()` on this new object -- it should be a list. Try to find the position of the "Historical population" in this list since we need it in the next step.
 
 ```{r}
 str(nds)
-head(nds)
+head(nds) #the position is number 2
 ```
 
 Extract the "Historical population" table from the list and save it as another object. You can use subsetting via `[[...]]` to extract pieces from a list. Print the result.
@@ -69,8 +68,13 @@ pop
 That's it for this page. However, we may want to repeat this process for other community areas. The Wikipedia page https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago has a section on "Places adjacent to Grand Boulevard, Chicago" at the bottom. Can you find the corresponding table in the list of tables that you created earlier? Extract this table as a new object.
     
 ```{r}
+#"Places adjacent to Grand Boulevard, Chicago" is number 3
+
 adj_places <- nds [[3]]
 adj_places
+
+adj_places1 <- nds [[4]] #adj_places1 one contains the tibble with names of the community areas
+adj_places1
 ```
 
 Now, grab the community areas east of Grand Boulevard and save them as a character vector. Print the result.
@@ -78,6 +82,9 @@ Now, grab the community areas east of Grand Boulevard and save them as a charact
 ```{r}
 east_areas <- adj_places [1, 1]
 east_areas
+
+east_areas1 <- adj_places1 [, ]
+east_areas1
 ```
 
 We want to use this list to create a loop that extracts the population tables from the Wikipedia pages of these places. To make this work and build valid urls, we need to replace empty spaces in the character vector with underscores. This can be done with `gsub()`, or by hand.
@@ -98,27 +105,29 @@ pops <- pop
 
 Build a small loop to test whether you can build valid urls using the vector of places and pasting each element of it after `https://en.wikipedia.org/wiki/` in a for loop. Calling `url` shows the last url of this loop, which should be https://en.wikipedia.org/wiki/Hyde_Park,_Chicago.
 
-```{r}
+```{r, echo=FALSE}
+#write_xlsx(east_areas1,"east_areas1.xlsx")
+#east_areas2 <- rio::import(here::here("Assignment 3 - web scrapping","east_areas2.xlsx")) 
 
-for (i in east_areas){
+
+```
+
+```{r}
+for (i in east_areas2){
   url <- paste0("https://en.wikipedia.org/wiki/", i)
   print(url)
 }
-
-for (i in 1:length(east_areas)) {
-    print(paste0("https://en.wikipedia.org/wiki/", i, east_areas[i]))
-}
-
 
 ```
 
 Now, extend the loop and add the code that is needed to grab the population tables from each page. Add columns to the original table `pops` using `cbind()`.
 
 ```{r}
-# for(i in places_east) {
-#   url <- ...
-#   ...
-# }
+
+for (i in east_areas2){
+  url <- paste0("https://en.wikipedia.org/wiki/", i)
+  print(url)
+}
 ```
 
 Use `str()` on the final result.
