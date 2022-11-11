@@ -1,0 +1,249 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Databases & SQL"
+author: "Christoph Kern and Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+# install.packages("tidyverse")
+# install.packages("DBI")
+# install.packages("dbplyr")
+# install.packages("bigrquery")
+library(tidyverse)
+library(DBI)
+library(dbplyr)
+library(bigrquery)
+```
+
+## Database connection
+
+In this notebook we use Google BigQuery, "Google's fully managed, petabyte scale, low cost analytics data warehouse". Google BigQuery hosts some free sample tables that can be used to exemplify the usage of SQL and dbplyr in R. Instruction on how to connect to Google BigQuery can be found here:
+
+https://github.com/r-dbi/bigrquery (see 'Billing project')
+
+https://db.rstudio.com/databases/big-query/
+
+After running the steps needed and initializing a project, paste your project ID into the following chunk.
+
+```{r}
+project <- "your-project-id"
+```
+
+We will begin with interacting with the BigQuery sample tables using the `DBI` package, with `bigrquery` as a backend. 
+
+```{r}
+con <- dbConnect(
+  bigrquery::bigquery(),
+  project = "publicdata",
+  dataset = "samples",
+  billing = project
+)
+con 
+```
+
+List some information about our connection setup.
+
+```{r}
+dbGetInfo(con)
+```
+
+Show tables that are available.
+
+```{r}
+dbListTables(con)
+```
+
+A more detailed overview about the sample tables, including a dataset preview, can be found here:
+
+https://cloud.google.com/bigquery/sample-tables
+
+## SQL 
+
+Now we can write our first query. We use the `natality` table which "describes all United States births registered in the 50 States, the District of Columbia, and New York City from 1969 to 2008".
+
+```{r}
+sql <- "SELECT * 
+        FROM `publicdata.samples.natality` 
+        LIMIT 100"
+```
+
+Note that the code above does not execute the query. To actually run it, we must pass it onto `dbGetQuery()`, together with our database connection object.
+
+```{r}
+dbGetQuery(con, sql)
+```
+
+This function executes the query and displays the result. However, to store the result as an object in our workspace, we have to use the assignment operator. Note that we used `LIMIT` in our `sql` query to ensure that the results object is manageable (not too large), since the table we are dealing with is huge.
+
+```{r}
+subtable <- dbGetQuery(con, sql)
+str(subtable)
+```
+
+Note that we can also run SQL code directly by using a SQL code chunk instead of an R chunk.
+
+```{sql connection= con}
+SELECT year, month, day, state, is_male
+FROM publicdata.samples.natality
+LIMIT 100
+```
+
+Its a good idea to check how many rows are in a table to get an idea of the dimensions we are dealing with (run twice).
+
+```{r}
+sql <- "SELECT COUNT(*) 
+        FROM `publicdata.samples.natality`" 
+```
+
+```{r}
+dbGetQuery(con, sql)
+```
+
+Seems like we want to stick with selecting only subsamples of this table. In the next query, we select rows using `WHERE`, and sort the result using `ORDER BY`.
+
+```{r}
+sql <- "SELECT year, month, day, state, is_male 
+        FROM `publicdata.samples.natality` 
+        WHERE year = 2004 AND month = 12
+        ORDER BY day, state"
+```
+
+```{r, message=FALSE}
+dbGetQuery(con, sql)
+```
+
+Try to use `COUNT` and `GROUP BY` to count the number of births for each state and month in 2004. Order the results by the number of births, starting with the highest number.
+
+```{r}
+sql <- "SELECT month, state, COUNT(*) AS count_birth
+        FROM `publicdata.samples.natality` 
+        WHERE year = 2004
+        GROUP BY month, state
+        ORDER BY COUNT(*) DESC"
+```
+
+```{r, message=FALSE}
+dbGetQuery(con, sql)
+```
+
+This time we want to count the number of births by state for the years 2003 and 2004. Google BigQuery allows to use `COUNTIF` to limit `COUNT` to a condition.
+
+```{sql connection= con, message = FALSE}
+SELECT state,
+      COUNTIF(year = 2003) AS count_birth_2003,
+      COUNTIF(year = 2004) AS count_birth_2004
+FROM publicdata.samples.natality 
+GROUP BY state
+ORDER BY COUNTIF(year = 2004) DESC
+```
+
+A subquery example. We use a query within a query to specify the `WHERE` condition in the outer query by looking up the maximum `plurality` in the inner query.
+
+```{sql connection= con, message = FALSE}
+SELECT state, plurality 
+FROM publicdata.samples.natality
+WHERE plurality = (SELECT MAX(plurality)
+                   FROM publicdata.samples.natality) 
+                   AND year = 2004
+```
+
+## dbplyr
+
+Next, we -- again -- use SQL syntax via `DBI` to specify and execute a rather simple query for the `natality` table.
+
+```{r}
+sql <- "SELECT year, month, day, state, is_male 
+        FROM `publicdata.samples.natality` 
+        WHERE year = 2004 AND is_male = TRUE
+        LIMIT 100"
+```
+
+```{r}
+dbGetQuery(con, sql)
+```
+
+However, we can also use `dplyr` commands to specify the exact same query. For this task, we first map the `natality` table to a tibble object in R.
+
+```{r}
+nat <- tbl(con, "natality")
+str(nat)
+class(nat)
+```
+
+This object can be used as if it was a `tibble`, although it is not an actual data frame in our workspace. Here is a `dplyr` way of counting the number of rows in the `natality` table.
+
+```{r, message = FALSE}
+nat %>% 
+  summarise(total = n())
+```
+
+We still don't want to save this table to our local machine without any subsetting. Here we first `filter()` by a specific year and then select the first 100 rows. This is equivalent to our initial SQL query in this section.
+
+```{r}
+nat %>%
+  select(year, month, day, state, is_male) %>%
+  filter(year == 2004 & is_male == TRUE) %>%
+  head(100)
+```
+
+If we save this pipeline as an object, this does not (yet) return the results set. Instead, we can use it to examine how the `dplyr` code is translated into SQL commands.
+
+```{r}
+sql <- 
+  nat %>%
+  select(year, month, day, state, is_male) %>%
+  filter(year == 2004 & is_male == TRUE) %>%
+  head(100)
+
+show_query(sql)
+```
+
+As a side note, here is an example of how basic functions are translated into SQL.
+
+```{r}
+translate_sql(mean(year, na.rm = TRUE))
+```
+
+Note that not all R functions can be translated.
+
+```{r}
+translate_sql(summary(year))
+```
+
+Now, back to our `natality` table. We may want to grab some piece of it and eventually save it as a local R object. Lets try some quite restrictive filtering and check the number of rows returned.
+
+```{r, message = FALSE}
+nat %>%
+  select(year, month, day, state, is_male) %>%
+  filter(year == 2004 & month == 1 & state == "DC") %>%
+  summarise(total = n())
+```
+
+In order to gather the data from the database, we use `collect()` at the end of the pipeline and assign the results to an R object.
+
+```{r, message = FALSE}
+sql_data <-
+  nat %>%
+  select(year, month, day, state, is_male) %>%
+  filter(year == 2004 & month == 1 & state == "DC") %>%
+  collect()
+```
+
+Confirm that we actually pulled the data to our local environment...
+
+```{r}
+str(sql_data)
+```
+
+...and close the connection.
+
+```{r}
+dbDisconnect(con)
+```
+
+## References
+
+* https://cloud.google.com/bigquery/

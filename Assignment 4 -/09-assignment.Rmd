@@ -1,0 +1,152 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Exercise"
+author: "Christoph Kern and Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+rm(list=ls()) 
+library(tidyverse)
+library(DBI)
+library(dbplyr)
+library(bigrquery)
+```
+
+## Database connection
+
+In this notebook we use Google BigQuery, "Google's fully managed, petabyte scale, low cost analytics data warehouse". Instruction on how to connect to Google BigQuery can be found here:
+
+https://github.com/r-dbi/bigrquery (see 'Billing project')
+
+https://db.rstudio.com/databases/big-query/
+
+After running the steps needed and initializing a project, paste your project ID into the following chunk.
+
+```{r}
+project <- "my-project-surv727"
+```
+
+First, set up the connection to the database. This time we use the Chicago crime database, which is a BigQuery version of the Chicago crime API we used in earlier classes.
+
+```{r}
+con <- dbConnect(
+  bigrquery::bigquery(),
+  project = "bigquery-public-data",
+  dataset = "chicago_crime",
+  billing = project
+)
+con
+```
+
+Show tables that are available.
+
+```{r}
+dbListTables(con)
+```
+
+## SQL and dbplyr
+
+Information on the `crime` table can be found here:
+
+https://cloud.google.com/bigquery/public-data/chicago-crime-data
+
+Write a first query that counts the number of rows of the `crime` table in the year 2016. The following code chunks expect SQL code.
+
+```{sql connection= con}
+sql <- "SELECT COUNT(*) 
+        FROM `bigquery-public-data.chicago_crime`
+        WHERE year = 2016"
+        
+dbGetQuery(con, sql)
+
+```
+
+Next, count the number of arrests grouped by `primary_type` in 2016. Note that is a somewhat similar task as above, with some adjustments on which rows should be considered. Sort the results, i.e. list the number of arrests in a descending order.
+
+```{sql connection= con}
+sql <- "SELECT * , COUNT(*) AS primary_type
+        FROM `bigquery-public-data.chicago_crime`
+        WHERE year = 2016"
+        
+dbGetQuery(con, sql)
+
+```
+
+We can also use the `date` for grouping. Count the number of arrests grouped by hour of the day in 2016. You can extract the latter information from `date` via `EXTRACT(HOUR FROM date)`. Which time of the day is associated with the most arrests? 
+
+```{sql connection= con}
+sql <- "SELECT * , COUNT(*) AS primary_type
+        FROM `publicdata.samples.natality` 
+        WHERE year = 2016
+        GROUP BY date, hour
+        ORDER BY COUNT(*) DESC"
+```
+
+Focus only on `HOMICIDE` and count the number of arrests for this incident type, grouped by year. List the results in descending order.
+
+```{sql connection= con}
+
+```
+
+Find out which districts have the highest numbers of arrests in 2015 and 2016. That is, count the number of arrests in 2015 and 2016, grouped by year and district. Again, list the results in descending order (within year).
+
+```{sql connection= con}
+
+```
+
+Now, try to compute the difference between the number of arrests in 2016 and 2015 by district. Order the results such that the district with the highest decrease in arrests comes first.
+
+```{sql connection= con}
+
+```
+
+Lets switch to writing queries from within R via the `DBI` package. Create a query object that counts the number of arrests grouped by `primary_type` of district 11 in year 2016. The results should be displayed in descending order.
+
+```{r}
+
+```
+
+Execute the query.
+
+```{r}
+
+```
+
+Try to write the very same query, now using the `dbplyr` package. For this, you need to first map the `crime` table to a tibble object in R.
+
+```{r}
+
+```
+
+Again, count the number of arrests grouped by `primary_type` of district 11 in year 2016, now using `dplyr` syntax.
+
+```{r}
+
+```
+
+Count the number of arrests grouped by `primary_type` and `year`, still only for district 11. Arrange the result by `year`.
+
+```{r}
+
+```
+
+Assign the results of the query above to a local R object.
+
+```{r}
+
+```
+
+Confirm that you pulled the data to the local environment by displaying the first ten rows of the saved data set.
+
+```{r}
+
+```
+
+Close the connection.
+
+```{r}
+dbDisconnect(con)
+```

@@ -1,0 +1,217 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Data display with ggplot2"
+author: "Christoph Kern"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(RSocrata)
+library(tidyverse)
+library(lubridate)
+library(ggmap)
+```
+
+## Data
+
+In this notebook, we use the Chicago crime data that is provided via the Socrata API. This data "... is extracted from the Chicago Police Department's CLEAR (Citizen Law Enforcement Analysis and Reporting) system." Here we only pull in data from January 2018.
+
+Source: https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2
+
+```{r}
+cc_2018 <- read.socrata("https://data.cityofchicago.org/resource/6zsd-86xi.json?$where=date between '2018-01-01' and '2018-01-31'")
+```
+
+Some quick data preparation.
+
+```{r}
+cc_2018$arrest <- as.factor(cc_2018$arrest)
+cc_2018$latitude <- as.numeric(cc_2018$latitude)
+cc_2018$longitude <- as.numeric(cc_2018$longitude)
+
+cc_2018 <- subset(cc_2018, complete.cases(cc_2018[,c(1,13,17)]))
+```
+
+## ggplot
+
+We begin by exemplifying the basic usage of `ggplot()` and then introduce additional features as we move forward. In general, the `ggplot` function needs at least a data object, a set of aesthetic mappings (`aes`) and a specific `geom_function` to produce a plot. As an example, we could use `geom_bar` to create a bar plot of `arrest`, colored by `primary_type` (optional).
+
+```{r}
+ggplot(cc_2018) +
+  geom_bar(mapping = aes(x = arrest, fill = primary_type))
+```
+
+As an alternative, we can also produce individual barplots grouped by `primary_type`. In `ggplot()` parlance, this is called "faceting". Try out what happens when you remove `scale = "free"`.
+
+```{r fig.height = 9, fig.width = 7}
+ggplot(cc_2018) +
+  geom_bar(mapping = aes(x = arrest)) +
+  facet_wrap(~ primary_type, scale = "free", ncol = 4)
+```
+
+Since `ggplot2` is part of the tidyverse, it works well in pipes. That is, we can first apply some data transformations and then hand over the result to `ggplot()`. The transformed data can be used for plotting e.g. the distribution of the number of crimes per `beat`, grouped by `arrest`.
+
+```{r}
+cc_2018 %>%
+  group_by(beat, arrest) %>%
+  summarise(total = n()) %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = total, fill = arrest), binwidth = 5)
+```
+
+Creating a different type of plot translates to using a different `geom_function`. Here we create  density plots instead of histograms. The bandwidth can be adjusted with the `bw` argument.
+
+```{r}
+cc_2018 %>%
+  group_by(beat, arrest) %>%
+  summarise(total = n()) %>%
+  ggplot() +
+  geom_density(mapping = aes(x = total, color = arrest), bw = 4)
+```
+
+Another example, now plotting incidents over time for specific types of crimes. For this type of information `geom_area` might be appropriate, but other `geom_functions` could be used as well.
+
+```{r}
+cc_2018 %>%
+  filter(primary_type %in% c("ASSAULT", "BATTERY", "NARCOTICS", "THEFT")) %>%
+  mutate(d_date = date(date)) %>%
+  group_by(d_date, primary_type, arrest) %>%
+  summarise(total = n()) %>%
+  ggplot() +
+  geom_area(aes(x = d_date, y = total, fill = primary_type)) +
+  facet_wrap(. ~ arrest, scale = "free")
+```
+
+Some data preparation for the next plots -- summing (two specific) crime incidents on the community level.
+
+```{r}
+cc_sub <-
+  cc_2018 %>%
+  mutate(d_assault = ifelse(primary_type == "ASSAULT", 1, 0),
+         d_theft = ifelse(primary_type == "THEFT", 1, 0)) %>%
+  group_by(arrest, community_area) %>%
+  summarise(assault = sum(d_assault), theft = sum(d_theft))
+```
+
+Using this data, we can create a scatterplot to investigate the relationship between the number of thefts and the number of assaults on the community level, colored by `arrest`.
+
+```{r}
+ggplot(cc_sub) +
+  geom_point(aes(x = assault, y = theft, color = arrest), size = 2)
+```
+
+With `ggplot()` we can add layers to a plot that utilize different `geom_functions`. `geom_smooth` allows to add a scatterplot smoother (loess regression line). Note that we can also use different shapes to distinguish observations by groups.
+
+```{r}
+ggplot(cc_sub) +
+  geom_point(aes(x = assault, y = theft, shape = arrest)) +
+  geom_smooth(aes(x = assault, y = theft))
+```
+
+Note that we can build the same graph using `stat_functions`, which take `geom` as an argument. 
+
+```{r}
+ggplot(cc_sub) +
+  stat_identity(aes(x = assault, y = theft, shape = arrest), geom = "point") +
+  stat_smooth(aes(x = assault, y = theft), geom = "smooth")
+```
+
+This approach gives us more flexibility in terms of how we can present our data. That is, we can use different `geoms` in connection with the `stat_functions` used above. This allows us to create almost any plot with `ggplot()`.
+
+```{r}
+ggplot(cc_sub) +
+  stat_identity(aes(label = community_area, x = assault, y = theft), geom = "text", alpha = 0.5) +
+  stat_smooth(aes(x = assault, y = theft), geom = "line", alpha = 0.5) +
+  stat_smooth(aes(x = assault, y = theft), geom = "ribbon", alpha = 0.1)
+```
+
+As before, faceting can be used to draw separate plots for subgroups. This time we set the data and the aesthetic mappings globally in the first line and modify it locally for `geom_smooth`.
+
+```{r}
+ggplot(cc_sub, aes(x = assault, y = theft)) +
+  geom_point() +
+  geom_smooth(data = filter(cc_sub, assault <= 60)) +
+  facet_wrap(. ~ arrest, scales = "free")
+```
+
+Of course we can add titles, modify labels, add annotations and change the general appearance of any `ggplot`. Here are just some minor modifications.
+
+```{r}
+ggplot(cc_sub, aes(x = assault, y = theft)) +
+  geom_point() +
+  geom_smooth(data = filter(cc_sub, assault <= 60)) +
+  facet_wrap(. ~ arrest, scales = "free") +
+  labs(x = "Number of assaults", 
+       y = "Number of thefts", 
+       title = "Assaults and Thefts in Communities in Chicago", 
+       caption = "Source: Socrata API") +
+  theme_light()
+```
+
+Some space to play with `stat_functions`, `geoms`, aesthetics and faceting.
+
+```{r}
+
+```
+
+## ggmap
+
+The `ggmap` package extends the `ggplot` framework by providing access to APIs that allow to grab various maps. In this section we first store map data for Chicago as an object.
+
+https://boundingbox.klokantech.com/
+
+```{r}
+bbox <- c(left = -87.896805, bottom = 41.677015, right = -87.409286, top = 42.082936)
+map <- get_stamenmap(bbox = bbox, zoom = 12, maptype = "toner-hybrid")
+ggmap(map)
+```
+
+We can now populate this map using observations from our data set. This can be done with `ggplot` code, whereas the plot is now initialized with `ggmap()`. In this example we simply add crime incidents based on their locations.
+
+```{r}
+ggmap(map) + 
+  geom_point(data = cc_2018, aes(x = longitude, y = latitude), alpha = 0.1, color = "red", size = 1)
+```
+
+Obviously this plot is pretty crowded. One solution could be to first aggregate the crime data on a small regional level by averaging the crime numbers for each `beat`.
+
+```{r}
+cc_agg <- 
+  cc_2018 %>% group_by(beat, arrest) %>%
+  summarise(total = n(), longitude = mean(longitude), latitude = mean(latitude)) %>%
+  arrange(desc(total)) %>% 
+  ungroup()
+
+head(cc_agg, 10)
+```
+
+This data can now be plotted such that higher crime numbers per beat are represented by bigger circles (via the `size` argument). We can also color the circles by `arrest`.
+
+```{r}
+ggmap(map) + 
+ geom_point(data = cc_agg, aes(x = longitude, y = latitude, color = arrest, size = total), alpha = 0.5)
+```
+
+Another approach would be to use the original data and produce a heat map. This can be implemented with `stat_density2d` in combination with the geom `polygon`. You can change the settings for `size`, `bins` and `range` to see what they refer to.
+
+```{r}
+ggmap(map) + 
+  stat_density2d(data = cc_2018, aes(x = longitude, y = latitude, fill = ..level.., alpha = ..level..), size = 1, bins = 40, geom = 'polygon') +
+  scale_alpha(range = c(.2, .3), guide = FALSE)
+```
+
+Finally, faceting also works with `ggmap()` heat maps.
+
+```{r}
+ggmap(map) + 
+  stat_density2d(data = cc_2018, aes(x = longitude, y = latitude, fill = ..level.., alpha = ..level..), size = 1, bins = 40, geom = 'polygon') +
+  scale_alpha(range = c(.2, .3), guide = FALSE) +
+  scale_fill_gradient(low = "black", high = "red") +
+  facet_wrap(~ arrest)
+```
+
+## References
+
+* https://ggplot2.tidyverse.org

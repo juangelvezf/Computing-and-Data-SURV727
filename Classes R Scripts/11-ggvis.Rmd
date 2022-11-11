@@ -1,0 +1,204 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Interactive Graphs"
+author: Christoph Kern <br> <font size="2">Thanks to Georg-Christoph Haas (IAB)!</font>
+output: html_notebook
+---
+
+## Setup
+
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ggvis)
+library(shiny)
+library(gapminder)
+```
+
+## Data
+
+In this notebook we use the gapminder dataset. The general idea is that we want to build a lightweight version of the interactive GDP versus life expectancy graph with ggvis().
+
+https://www.gapminder.org/tools
+
+Before we start with creating graphs, we take a look at the data.
+
+```{r}
+head(gapminder)
+summary(gapminder)
+
+?gapminder
+```
+
+## Task 1: Basic graph 
+
+We'll create our graph step by step, starting with a static scatterplot that maps GDP per capita on the x-axis and life expectancy on the y-axis. We map the variable `continent` to fill and set size equivalent to `pop`.
+
+```{r}
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  layer_points(stroke := "white")
+```
+
+## Task 2: Adding a hover option
+
+Now we take our static graph from task 1 and add a hover option to it (`add_tooltip()`).
+
+```{r}
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  layer_points(stroke := "white") %>%
+  add_tooltip(function(data){paste0(
+    "lifeExp: ", round(data$lifeExp), "<br>",
+    "gdpPercap: ", round(data$gdpPercap)) })
+```
+
+## Task 3: Extending the hover option
+
+Now we add country to the function `addtooltip()`. This requires to add an additional `layer_points()` that allows to access the `country` variable.
+
+```{r}
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  layer_points(stroke := "white") %>%
+  layer_points(fill := ~country, 
+               opacity = 0) %>%
+  add_tooltip(function(data){paste0(
+    "country: ", data$country, "<br>",
+    "lifeExp: ", round(data$lifeExp), "<br>",
+    "gdpPercap: ", round(data$gdpPercap)) })
+```
+
+## Task 4: Choosing a continent
+
+Our basic graph only takes data from 2007. Still, the graph seems crowded and it would be nice to choose which continents are shown. We can solve this with `dplyr`s `filter()` function and `input_checkboxgroup()`. 
+
+```{r}
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  filter(continent %in% 
+           eval(input_checkboxgroup(
+             c("Americas", "Africa", "Asia", "Europe", "Oceania"), 
+             selected = c("Americas", "Africa", "Asia", "Europe", "Oceania"))))
+```
+
+## Task 5: Adding a slider for years
+
+In our previous graphs we only use data from 2007. Here we add a slider with the `input_slider()` function to select between years.
+
+```{r}
+gapminder %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  filter(year == eval(input_slider(min = 1952, max = 2007, value = 1952, step = 5, animate = T, sep = ""))) %>%
+   layer_points(stroke := "white")
+```
+
+## Task 6: Adding fixed axes
+
+The next task is to fix the scales so that we can observe changes over years. First, we define an invisible minimum and maximum point with `layer_points()`. Next, we use the function `add_axis()` to choose reasonable levels for the axis. 
+
+```{r}
+gapminder %>%
+  ggvis(x= ~gdpPercap,
+        y= ~lifeExp,
+        fill= ~continent,
+        size:=~pop/250000,
+        opacity:=0.5) %>%
+  filter(year == eval(input_slider(min = 1952, max = 2007, value = 1952, step = 5, animate = T, sep = ""))) %>%
+  layer_points(stroke := "white") %>%
+  layer_points(x = min(gapminder$gdpPercap), y = min(gapminder$lifeExp), opacity = 0) %>%
+  layer_points(x = max(gapminder$gdpPercap), y = max(90), opacity = 0) %>%
+  add_axis("y", values = seq(30 , 90, by = 10)) %>%
+  add_axis("x", values = c(25000, 50000, 75000, 100000))
+```
+
+## Task 7: Slider axes (zoom)
+
+In the next task we take our fixed axes and make them interactive again by adding sliders.
+
+```{r}
+y_axis <- input_slider(min = 30, max = 90, value = c(30, 90))
+x_axis <- input_slider(min = 0, max = 100000, value = c(1000, 100000), step = 1000)
+
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  layer_points(stroke := "white") %>%
+  scale_numeric("y", domain = y_axis, clamp = T) %>%
+  scale_numeric("x", domain = x_axis, clamp = T)
+```
+
+## Task 8: Your own ideas
+
+In this chunk you can add your own ideas. Try to add another interactive component to the graph.
+
+```{r}
+gapminder %>%
+  filter(year == 2007) %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  layer_points(stroke := "white") 
+```
+
+## Task 9: Putting it all together
+
+Finally, we can combine all pieces from above and create our final interactive graph. (The viewer may be too small to display this graph. Open it in the browser.)
+
+```{r}
+y_axis <- input_slider(min = 30, max = 90, value = c(30, 90), label= "Range of Life Expectancy")
+x_axis <- input_slider(min = 0, max = 100000, value = c(1000, 100000), step = 1000, label = "Range GDP per Capita")
+
+gapminder %>%
+  ggvis(x = ~gdpPercap,
+        y = ~lifeExp,
+        fill = ~continent,
+        size := ~pop/250000,
+        opacity := 0.5) %>%
+  filter(continent %in% 
+           eval(input_checkboxgroup(
+             c("Americas", "Africa", "Asia", "Europe", "Oceania"), 
+             selected = c("Americas", "Africa", "Asia", "Europe", "Oceania"),
+             label = "Choose a Continent"))) %>%
+  filter(year %in% eval(input_slider(min = 1952, max = 2007, value = 1952, step = 5, animate = T, label = "Year (Press Play)", sep = ""))) %>%
+  layer_points(stroke := "white") %>%
+  layer_points(fill := ~country, 
+               opacity = 0) %>%
+  add_tooltip(function(data){paste0(
+    "country: ", data$country, "<br>",
+    "lifeExp: ", round(data$lifeExp), "<br>",
+    "gdpPercap: ", round(data$gdpPercap)) }) %>%
+  scale_numeric("y", domain = y_axis, clamp = T) %>%
+  scale_numeric("x", domain = x_axis, clamp = T) %>%
+  add_axis("x", title_offset = 40, title = "GDP per Capita in US-Dollar (inflation adjusted)", properties = axis_props(title = list(fontSize = 15))) %>%
+  add_axis("y", title_offset = 40, title = "Life Expectancy in years", properties = axis_props(title = list(fontSize = 15)))
+```
