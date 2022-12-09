@@ -1,0 +1,280 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: "Data Exploration"
+author: "Christoph Kern and Ruben Bach"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(RSocrata)
+library(censusapi)
+library(tidyverse)
+library(magrittr)
+library(ggmap)
+library(factoextra)
+library(lubridate)
+library(corrplot)
+```
+
+## Data I
+
+In the first part of this notebook, we use the Chicago crime data that is provided via the Socrata API. This data "... is extracted from the Chicago Police Department's CLEAR (Citizen Law Enforcement Analysis and Reporting) system." Here we only pull in data from January 2018.
+
+Source: https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2
+
+```{r}
+cc_2018 <- read.socrata("https://data.cityofchicago.org/resource/6zsd-86xi.json?$where=date between '2018-01-01' and '2018-01-31'")
+```
+
+Some quick data preparation.
+
+```{r}
+cc_2018$arrest <- as.factor(cc_2018$arrest)
+cc_2018$latitude <- as.numeric(cc_2018$latitude)
+cc_2018$longitude <- as.numeric(cc_2018$longitude)
+
+cc_2018 <- subset(cc_2018, complete.cases(cc_2018[,c(1,13,17)]))
+```
+
+Starting with some data exploration, the `ggmap` package provides some nice options to plot data on maps. Here we plot the location of crime incidents in Chicago in January 2018, colored by `arrest`.
+
+```{r, message=FALSE}
+qmplot(longitude, latitude, data = cc_2018, maptype = "toner-lite", size = I(0.5), alpha = I(0.45), color = arrest)
+```
+
+We can also focus on specific types of crimes. For this, we can first filter crimes using `primary_type` and then plot the results based on location, faceted by type. 
+
+```{r, message=FALSE}
+cc_2018 %>%
+  filter(primary_type %in% c("BURGLARY", "NARCOTICS")) %>%
+  qmplot(longitude, latitude, data = ., maptype = "toner-lite", size = I(0.75), alpha = I(0.75), color = primary_type) + 
+  facet_grid(cols = vars(primary_type))
+```
+
+## Clustering
+
+In the previous graph, narcotics-related crimes seem to cluster at certain locations. We can use Clustering to structure our data and find groups of crime incidents that occurred at similar locations. First, we create a subset of the crimes of interest.
+
+```{r}
+c_data <-
+  cc_2018 %>%
+  filter(primary_type == "NARCOTICS") %>%
+  select(longitude, latitude)
+```
+
+Then, we can run `kmeans()` to employ K-Means Clustering. Based on the previous plot we assume that a three cluster solution is adequate. Note that `nstart` can be used to try out several starting points for the clusters.
+
+```{r}
+km_1 <- kmeans(c_data, 3, nstart = 20)
+km_1
+```
+
+Given the K-Means three cluster solution, we can again plot our crime incidents, now colored by cluster membership.
+
+```{r, message=FALSE}
+c_data %>%
+  qmplot(longitude, latitude, data = ., maptype = "toner-lite", size = I(0.75), alpha = I(0.75), color = as.factor(km_1$cluster))
+```
+
+However, grouping crime locations into three clusters might not be the optimal solution. We can utilize `fviz_nbclust()` to compute the within cluster sums of squares over a range of cluster solutions and to visualize the result.
+
+```{r}
+fviz_nbclust(c_data, #data set we want to use
+             kmeans, #cluster method
+             method = "wss", #method used for estimating the optimal number of clusters
+             k.max = 25)
+```
+
+Based on the "elbow" criterion, we may want to choose k = 6 as the optimal number of clusters in this case. Therefore, we run `kmeans()` again and also plot the new cluster solution to inspect the new result.
+
+```{r, message=FALSE}
+km_2 <- kmeans(c_data, 6, nstart = 20)
+
+c_data %>%
+  qmplot(longitude, latitude, data = ., maptype = "toner-lite", size = I(0.75), alpha = I(0.75), color = as.factor(km_2$cluster))
+```
+
+Lets add another variable to find clusters that build on more information. We might be interested which crime incidents are related with respect to location and the time of the day they occur. First, we create a new subset of the Chicago crime data.
+
+```{r}
+hclust_data <-
+  cc_2018 %>%
+  filter(arrest == "TRUE") %>%
+  mutate(hour = hour(date)) %>%
+  select(longitude, latitude, hour) %>%
+  mutate_all(scale)
+```
+
+This time we use hierarchical clustering to find clusters. This clustering approach needs a distance matrix as input, which can be computed with `dist()`.
+
+```{r}
+hclust_d <- dist(hclust_data)
+as.matrix(hclust_d)[1:10, 1:10]
+```
+
+Hierarchical clustering is implemented in `hclust()`. To demonstrate that Clustering is very sensitive to the parameters being used, we create three cluster objects based on three types of linkage methods.
+
+```{r}
+hc_complete <- hclust(hclust_d, method = "complete")
+hc_average <- hclust(hclust_d, method = "average")
+hc_ward <- hclust(hclust_d, method = "ward.D2")
+```
+
+The dendograms of the cluster results show how observations are merged to create clusters. On this basis, we can pick the number of clusters we want to extract by stopping the fusion process at a certain point. `rect.hclust()` can be used to highlight a specific cluster solution.
+
+```{r}
+plot(hc_complete, main = "Complete Linkage", xlab = "", sub = "")
+plot(hc_average, main = "Average Linkage", xlab = "", sub = "")
+plot(hc_ward, main = "Ward", xlab = "", sub = "")
+
+rect.hclust(hc_ward, 
+            k = 6, 
+            border = "red")
+```
+
+We want to create six clusters based on the `hc_ward` object.
+
+```{r}
+cutree(hc_ward, 6)
+```
+
+One way to make sense of a cluster solution is to simply compute the mean of the variables we used to generate the clusters for each cluster.
+
+```{r}
+cc_2018 %>%
+  filter(arrest == "TRUE") %>%
+  mutate(hour = hour(date)) %>%
+  mutate(cluster = cutree(hc_ward, 6)) %>%
+  group_by(cluster) %>%
+  summarise(mean(longitude), mean(latitude), mean(hour), district =  names(table(district))[which.max(table(district))])
+```
+
+For our data, plotting the crime incidents on a map, colored by cluster membership, is again very helpful to interpret the clustering results. 
+
+```{r, message=FALSE}
+cc_2018 %>%
+  filter(arrest == "TRUE") %>%
+  qmplot(longitude, latitude, data = ., maptype = "toner-lite", size = I(0.75), alpha = I(0.75), color = as.factor(cutree(hc_ward, 6)))
+```
+
+## Data II
+
+In this section, we use the Census API to gather data from the American Community Survey (ACS). The `censusapi` package provides a nice R interface for communicating with this API. This requires an access key, which can be obtained here:
+
+https://api.census.gov/data/key_signup.html
+
+```{r}
+cs_key <- "e1f9f2d06a2d9fd1e4b6b1242d6247c3f6f63775"
+```
+
+There are many Census API endpoints, which can be listed using `listCensusApis()`. 
+
+```{r}
+apis <- listCensusApis()
+View(apis)
+```
+
+From here on, we will focus on `acs/acs5` (ACS 5-Year data). Another useful helper function is `listCensusMetadata()`, which can be used to gather some information about the regional level on which data might be available.
+
+```{r}
+acs_geo <- listCensusMetadata(name = "acs/acs5",
+                              vintage = 2018,
+                              type = "geography")
+head(acs_geo)
+```
+
+To narrow down queries based on location, the following websites list the regional codes that are used by the Census Bureau.
+
+https://www.census.gov/geo/reference/ansi_statetables.html
+https://www.census.gov/geo/reference/codes/cou.html
+
+We can also use `listCensusMetadata()` to get information about the available variables.
+
+```{r}
+acs_vars <- listCensusMetadata(name = "acs/acs5", 
+                               vintage = 2018,
+                               type = "variables")
+head(acs_vars)
+```
+
+The following website also contains information on which variables are available for the ACS 5-Year data.
+
+https://www.census.gov/data/developers/data-sets/acs-5year.html
+
+In the following, we request some socio-demographic information on a census tract level for the state of Illinois from the ACS 5-Year data.
+
+```{r}
+acs_il <- getCensus(name = "acs/acs5",
+                    vintage = 2018, 
+                    vars = c("NAME", 
+                             "B01001_001E", "B11016_002E", "B06002_001E", "B19019_001E", "B19019_002E", "B19019_003E", "B19301_001E"),
+                    region = "tract:*", 
+                    regionin = "state:17",
+                    key = cs_key)
+head(acs_il)
+```
+
+First thing to do is to convert values that represent missings to NAs and rename variables.
+
+```{r}
+acs_il[acs_il == -666666666] <- NA
+
+acs_il %<>%
+  rename(pop = B01001_001E, 
+         family = B11016_002E,
+         age = B06002_001E, 
+         hh_income = B19019_001E,
+         hh_income_1pers = B19019_002E,
+         hh_income_2pers = B19019_003E,
+         income = B19301_001E)
+```
+
+Next, we prepare the data for PCA. We want to extract principle components in order to condense the set of demographic features that we have in our data set. In this context, it's also useful to display a scatterplot matrix before running PCA.
+
+```{r}
+acs_sub <-
+  acs_il %>%
+  drop_na(.) %>%
+  select(-c(state, county, tract, NAME)) %T>%
+  pairs(.)
+```
+
+## PCA
+
+Principle Component Analysis is implemented in `prcomp()`. It is advisable to run PCA on variables that are on the same scale, i.e. we want to use `scale.` to scale our features prior to the analysis.
+
+```{r}
+pca <- prcomp(x = acs_sub, 
+                  scale. = TRUE)
+```
+
+How many components are needed? We can assess the importance of each component by investigating the amount of variance explained.
+
+```{r}
+summary(pca)
+```
+
+This information can also be plotted with a screeplot.
+
+```{r}
+fviz_screeplot(pca)
+```
+
+Looks like extracting three Principle Components is a reasonable solution. We can print the loadings of these components for further interpretation.
+
+```{r}
+pca$rotation[, 1:3]
+```
+
+Another way of inspecting the PCA result is looking at the squared coordinates ((loadings * the component standard deviations)^2), which indicate how good a variable is represented by a given component.
+
+```{r}
+var <- get_pca_var(pca)
+corrplot(var$cos2, is.corr = FALSE)
+```
+
+## References
+
+* https://github.com/dkahle/ggmap

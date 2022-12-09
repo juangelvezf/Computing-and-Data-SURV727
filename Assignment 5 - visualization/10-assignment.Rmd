@@ -1,0 +1,144 @@
+---
+title: "Fundamentals of Computing and Data Display"
+subtitle: Exercise - Juan David Gelvez
+output:
+  html_document:
+    df_print: paged
+---
+
+## Setup
+
+```{r}
+library(RSocrata)
+library(jsonlite)
+library(tidyverse)
+library(lubridate) 
+```
+
+## Data
+
+In this notebook, we use crime data from the City of Cincinnati, January to April 2020. "Incidents are the records, of reported crimes, collated by an agency for management."
+
+Source: https://dev.socrata.com/foundry/data.cincinnati-oh.gov/k59e-2pvf
+
+```{r}
+cincinnati <- read.socrata("https://data.cincinnati-oh.gov/resource/k59e-2pvf.json?$where=date_reported between '2020-01-01' and '2020-04-15'")
+
+```
+
+Data prep and overview.
+
+```{r}
+cincinnati$datetime <- as_datetime(cincinnati$date_reported)
+cincinnati$date <- date(cincinnati$datetime)
+cincinnati$hourofday <- hour(cincinnati$datetime)
+names(cincinnati)
+```
+
+## ggplot
+
+The first task is to create a basic barplot for `offense` to get an idea of the prevalence of different types of crimes. It might make sense to flip the graph to make the labels more readable.
+
+```{r}
+ggplot(cincinnati) +
+  geom_bar(mapping = aes(x = offense))+ coord_flip()
+```
+
+Calculate the total number of criminal offenses grouped by `dst` and `offense`. Try to create boxplots for each `offense` that visualize the distribution of the total number of crimes. Again, flip the graph to make the labels more readable.
+
+```{r}
+cincinnati %>%
+  group_by(dst, offense) %>%
+  summarise(total = n()) %>%
+  ggplot() +
+  geom_boxplot(mapping = aes(x = total, fill = offense))+ coord_flip()
+```
+
+Create a plot that visualizes the total number of criminal offenses over `hourofday`. Draw separate lines for each `dayofweek` (note https://ggplot2.tidyverse.org/reference/aes_group_order.html).
+
+```{r}
+p <- cincinnati%>%
+  group_by(offense, hourofday, dayofweek)%>%
+  summarise(total=n())%>%
+  ggplot(mapping = aes(hourofday, total))+geom_line(aes(color=dayofweek))
+
+p
+```
+
+Focus only on the two most common types of crimes. Visualize the total number of offenses for these types of crimes over `hourofday`, separate for each `dayofweek`. Stated differently -- find a good way to visualize crime trends with an additional grouping variable.
+
+```{r}
+cincinnati%>%
+  filter(offense %in% c("THEFT", "CRIMINAL DAMAGING/ENDANGERING")) %>%
+  group_by(offense, hourofday, dayofweek) %>%
+  summarise(total = n()) %>%
+  ggplot(aes(x=hourofday, y=total)) +geom_line()+
+  facet_wrap(.~ dayofweek, scale = "free")
+
+```
+
+Again, plot the total number of crimes over `hourofday`, but this time we want to have a separate plot for each `offense` (`THEFT` and `CRIMINAL DAMAGING/ENDANGERING`) and `dayofweek` combination. Add an additional layer of your choice to each individual plot that uses another `geom` (with the same data).
+
+```{r}
+cincinnati%>%
+  filter(offense %in% c("THEFT", "CRIMINAL DAMAGING/ENDANGERING")) %>%
+  group_by(offense, hourofday, dayofweek) %>%
+  summarise(total = n()) %>%
+  ggplot(aes(x=hourofday, y=total)) +
+  geom_line(aes(color = dayofweek)) +
+  facet_wrap(.~ offense, scale = "free")
+```
+
+Try to create a heatmap (not a geographic map) that visualizes the total number of crimes per `hourofday` and `dayofweek`. Check the `ggplot()` documentation to find out which `geom_function` can be used for this task.
+
+```{r}
+h<- cincinnati%>%
+  group_by(offense, hourofday, dayofweek)%>%
+  summarise(total=n())%>%
+  ggplot(mapping = aes(hourofday, dayofweek,fill=total))+
+  geom_tile()+scale_fill_distiller(palette = "RdPu")
+
+h
+```
+
+Extend your heatmap by adding more information. This could e.g. be a `geom_text` layer that prints the total number of crimes in each cell of the heatmap. 
+
+```{r}
+  h+geom_text(aes(label=total),size=2)
+```
+
+Building on the previous examples, create two separate heatmaps for `THEFT` and `CRIMINAL DAMAGING/ENDANGERING` via faceting.
+
+```{r}
+facing <- cincinnati %>%
+  filter(offense %in% c("THEFT", "CRIMINAL DAMAGING/ENDANGERING"))%>%
+  group_by(offense, hourofday, dayofweek)%>%
+  summarise(total=n())%>%
+  ggplot(aes(hourofday, dayofweek, fill=total))+geom_tile()+scale_fill_distiller+
+  geom_text(aes(label=total), size=2)+facet_wrap(~offense, ncol = 4)
+
+facing
+```
+
+Finally, build a plot that visualizes the crime trend/ the total number of crime offenses over the whole time range of our data. Add any layer, aesthetic or facet that you find useful. 
+
+```{r}
+cincinnati$d_c <- as.Date(cincinnati$date, format="%Y-%m-%d")
+cincinnati$month <- format(cincinnati$d_c, "%m")
+cincinnati$month <- as.factor(cincinnati$month)
+
+levels(cincinnati$month) <- c("Jan", "Feb", "Mar", "Apr")
+typeof(cincinnati$dst)
+cincinnati$dst <- as.factor(cincinnati$dst)
+
+levels(cincinnati$dst) <- c("1", "2", "3", "4", "5", "CB", "OTR")
+
+ 
+t <- cincinnati %>%
+  group_by(dst, dayofweek, month)%>%
+  summarise(total=n())%>%
+  ggplot(aes(x=dst, y=dayofweek, fill=total))+geom_tile()+
+  geom_text(aes(label=total, size=2))+
+  facet_wrap(~month, nrow = 2, ncol = 2)
+t
+```
